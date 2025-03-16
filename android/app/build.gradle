@@ -105,6 +105,10 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+
+    configurations.all {
+        exclude group: 'com.swmansion.rnscreens', module: 'react-native-screens'
+    }
 }
 
 dependencies {
@@ -116,4 +120,6 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
 }
