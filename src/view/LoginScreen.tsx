@@ -201,7 +201,10 @@ const LoginScreen: React.FC = () => {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.logoContainer}>
             <Text variant="headlineMedium" style={styles.title}>Secure Auth</Text>
             <Text variant="bodyLarge" style={styles.subtitle}>Sign in to your account</Text>
@@ -333,10 +336,11 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 100,
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 20,
     marginBottom: 40,
   },
   title: {
