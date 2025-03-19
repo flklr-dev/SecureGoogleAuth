@@ -1,14 +1,11 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { sslPinning } from 'react-native-ssl-pinning';
+import axios, { AxiosInstance } from 'axios';
 
-class ApiService {
-  private api: AxiosInstance;
-  private baseURL: string = 'https://your-api-endpoint.com';
-  
+class Api {
+  private instance: AxiosInstance;
+
   constructor() {
-    // Create axios instance with default config
-    this.api = axios.create({
-      baseURL: this.baseURL,
+    // Create Axios instance with secure defaults
+    this.instance = axios.create({
       timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
@@ -16,70 +13,42 @@ class ApiService {
       }
     });
     
-    // Configure request interceptor for certificate pinning
-    this.api.interceptors.request.use(async (config) => {
-      // Implement certificate pinning
-      try {
-        const modifiedConfig = { ...config };
-        
-        // If request is to our domain, apply SSL pinning
-        if (config.url?.startsWith(this.baseURL)) {
-          const sslResponse = await sslPinning.fetch(
-            config.url,
-            {
-              method: config.method?.toUpperCase() || 'GET',
-              headers: config.headers as Record<string, string>,
-              body: config.data ? JSON.stringify(config.data) : undefined,
-              timeoutInterval: config.timeout,
-              // The hash values should be obtained from your backend certificates
-              sslPinning: {
-                certs: ['sha256/YOUR_CERT_HASH_1', 'sha256/YOUR_CERT_HASH_2']
-              }
-            }
-          );
-          
-          // Handle response here or return modified config
-          return modifiedConfig;
+    // Add request interceptor for logging (in development only)
+    if (__DEV__) {
+      this.instance.interceptors.request.use(
+        config => {
+          console.log('Request:', config.method, config.url);
+          return config;
+        },
+        error => {
+          console.error('Request error:', error);
+          return Promise.reject(error);
         }
-        
-        return modifiedConfig;
-      } catch (error) {
-        console.error('SSL Pinning Error:', error);
-        throw new Error('Security error: Certificate validation failed');
-      }
-    });
+      );
+    }
   }
-  
-  // Set auth token for all requests
-  setAuthToken(token: string): void {
-    this.api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+  // Set auth token for Firebase or other services if needed
+  setAuthToken(token: string | null): void {
+    if (token) {
+      this.instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete this.instance.defaults.headers.common['Authorization'];
+    }
   }
-  
-  // Clear auth token
-  clearAuthToken(): void {
-    delete this.api.defaults.headers.common['Authorization'];
-  }
-  
-  // API methods
-  async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.api.get<T>(url, config);
+
+  // If you later decide to add an API, these methods will be ready
+  async get<T>(endpoint: string, params = {}): Promise<T> {
+    const response = await this.instance.get<T>(endpoint, { params });
     return response.data;
   }
-  
-  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.api.post<T>(url, data, config);
-    return response.data;
-  }
-  
-  async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.api.put<T>(url, data, config);
-    return response.data;
-  }
-  
-  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.api.delete<T>(url, config);
+
+  async post<T>(endpoint: string, data = {}): Promise<T> {
+    const response = await this.instance.post<T>(endpoint, data);
     return response.data;
   }
 }
 
-export default new ApiService(); 
+// Singleton instance
+const api = new Api();
+export default api; 

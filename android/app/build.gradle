@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.google.gms.google-services"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -122,4 +123,14 @@ dependencies {
     }
 
     implementation 'com.google.android.gms:play-services-auth:20.7.0'
+
+    // Add Firebase dependencies if needed
+    implementation platform('com.google.firebase:firebase-bom:33.10.0')
+    implementation 'com.google.firebase:firebase-analytics'
 }
+
+project.ext.vectoricons = [
+    iconFontNames: [ 'FontAwesome.ttf' ]
+]
+
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"

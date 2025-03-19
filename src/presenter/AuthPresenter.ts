@@ -31,11 +31,12 @@ class AuthPresenter {
     }
   }
   
-  async signIn(): Promise<void> {
+  async signIn(): Promise<AuthState> {
     const newState = await AuthModel.signIn();
     if (this.view) {
       this.view.updateAuthState(newState);
     }
+    return newState;
   }
   
   async signOut(): Promise<void> {
@@ -47,6 +48,18 @@ class AuthPresenter {
   
   getAuthState(): AuthState {
     return AuthModel.getState();
+  }
+  
+  async signInWithEmailPassword(email: string, password: string): Promise<AuthState> {
+    const newState = await AuthModel.signInWithEmailPassword(email, password);
+    this.updateView();
+    return newState;
+  }
+  
+  async registerWithEmailPassword(email: string, password: string): Promise<AuthState> {
+    const newState = await AuthModel.registerWithEmailPassword(email, password);
+    this.updateView();
+    return newState;
   }
 }
 

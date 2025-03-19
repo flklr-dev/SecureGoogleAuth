@@ -1,21 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
-  Text, 
   StyleSheet, 
-  TouchableOpacity, 
-  ActivityIndicator,
-  TextInput,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView
+  KeyboardAvoidingView, 
+  Platform, 
+  ScrollView,
+  Image 
 } from 'react-native';
+import { 
+  Button, 
+  Text, 
+  TextInput,
+  MD3LightTheme,
+  Provider as PaperProvider,
+  Portal,
+  Modal as PaperModal
+} from 'react-native-paper';
 import AuthPresenter from '../presenter/AuthPresenter';
 import { AuthState } from '../model/AuthModel';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useNavigation } from '../utils/navigation';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+
+const theme = {
+  ...MD3LightTheme,
+  colors: {
+    ...MD3LightTheme.colors,
+    primary: '#4285F4',
+  },
+};
 
 const LoginScreen: React.FC = () => {
+  const navigation = useNavigation();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     user: null,
@@ -23,44 +46,27 @@ const LoginScreen: React.FC = () => {
     loading: false,
     error: null,
   });
-
-  // Form state
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    // Register this component as the view for the presenter
-    AuthPresenter.attachView({
-      updateAuthState: (state: AuthState) => {
-        setAuthState(state);
-      }
+    // Configure GoogleSignin once with all needed options
+    GoogleSignin.configure({
+      webClientId: '615048959288-411ri03eldq6hg0fu7k705f5jr5c0ceu.apps.googleusercontent.com',
+      offlineAccess: true,
+      forceCodeForRefreshToken: true, 
+      prompt: 'select_account' // Forces account selection dialog
     });
-
-    // Initialize auth state
-    AuthPresenter.initialize();
-
-    // Clean up when component unmounts
-    return () => {
-      AuthPresenter.detachView();
-    };
   }, []);
 
-  // Handle successful authentication
-  useEffect(() => {
-    if (authState.isAuthenticated) {
-      console.log('Login successful! Would navigate to next screen');
-    }
-  }, [authState.isAuthenticated]);
-
-  const validateEmail = (email: string) => {
+  const validateEmail = (email: string, isTouched: boolean = true) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) {
+    if (!email && isTouched) {
       setEmailError('Email is required');
       return false;
-    } else if (!emailRegex.test(email)) {
+    } else if (email && !emailRegex.test(email)) {
       setEmailError('Please enter a valid email address');
       return false;
     } else {
@@ -69,12 +75,9 @@ const LoginScreen: React.FC = () => {
     }
   };
 
-  const validatePassword = (password: string) => {
-    if (!password) {
+  const validatePassword = (password: string, isTouched: boolean = true) => {
+    if (!password && isTouched) {
       setPasswordError('Password is required');
-      return false;
-    } else if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
       return false;
     } else {
       setPasswordError('');
@@ -82,146 +85,243 @@ const LoginScreen: React.FC = () => {
     }
   };
 
-  const handleLogin = () => {
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    validateEmail(text, emailTouched);
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    validatePassword(text, passwordTouched);
+  };
+
+  const handleEmailBlur = () => {
+    setEmailTouched(true);
+    validateEmail(email, true);
+  };
+
+  const handlePasswordBlur = () => {
+    setPasswordTouched(true);
+    validatePassword(password, true);
+  };
+
+  const handleEmailFocus = () => {
+    if (!emailTouched) {
+      setEmailTouched(true);
+    }
+  };
+
+  const handlePasswordFocus = () => {
+    if (!passwordTouched) {
+      setPasswordTouched(true);
+    }
+  };
+
+  const handleLogin = async () => {
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
 
     if (isEmailValid && isPasswordValid) {
-      // Implement your login logic here
-      console.log('Login with:', email, password);
-      // For now, we'll just use the Google sign-in
-      handleGoogleSignIn();
+      setIsLoggingIn(true);
+      try {
+        await AuthPresenter.signInWithEmailPassword(email, password);
+      } catch (error) {
+        console.error('Login error:', error);
+      } finally {
+        setIsLoggingIn(false);
+      }
     }
   };
 
   const handleGoogleSignIn = async () => {
-    await AuthPresenter.signIn();
-  };
+    setIsLoggingIn(true);
+    try {
+      // Force the account picker dialog to show by signing out first
+      try {
+        await GoogleSignin.signOut();
+      } catch (e) {
+        console.log('No previous session to sign out from');
+      }
+      
+      // Get available play services
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const userInfo = await GoogleSignin.signIn();
+      console.log('Google Sign-In Success:', userInfo);
+      
+      // Call AuthPresenter to handle the sign-in
+      const result = await AuthPresenter.signIn();
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
 
-  const handleSignOut = async () => {
-    await AuthPresenter.signOut();
-  };
+      // Extract user name - handle different response formats
+      let userName = '';
+      if (userInfo.user) {
+        userName = userInfo.user.name || userInfo.user.email;
+      } else if (userInfo.data && userInfo.data.user) {
+        userName = userInfo.data.user.name || userInfo.data.user.email;
+      } else {
+        userName = 'User';
+      }
 
-  const navigateToRegister = () => {
-    console.log('Navigate to Register screen');
-    // Would navigate to RegisterScreen
+      // Show success message
+      setSuccessMessage(`Welcome ${userName}!`);
+      setSuccessModalVisible(true);
+      
+      // Ensure navigation happens after modal is shown
+      setTimeout(() => {
+        // First close the modal
+        setSuccessModalVisible(false);
+        
+        // Then navigate immediately with a small delay to ensure
+        // the modal closing animation completes
+        setTimeout(() => {
+          try {
+            console.log('Navigating to Home screen');
+            navigation.navigate('Home');
+          } catch (e) {
+            console.error('Navigation error:', e);
+          }
+        }, 100);
+      }, 1500);
+
+    } catch (error) {
+      console.error('Google Sign-In Error:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Sign in failed');
+      setErrorModalVisible(true);
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.title}>Secure Login</Text>
-        
-        {authState.loading ? (
-          <ActivityIndicator size="large" color="#4285F4" />
-        ) : authState.isAuthenticated ? (
-          <View style={styles.userInfoContainer}>
-            <Text style={styles.welcomeText}>
-              Welcome, {authState.user?.name}
-            </Text>
-            <Text style={styles.emailText}>{authState.user?.email}</Text>
-            <TouchableOpacity
-              style={styles.signOutButton}
-              onPress={handleSignOut}
-            >
-              <Text style={styles.signOutButtonText}>Sign Out</Text>
-            </TouchableOpacity>
+    <PaperProvider theme={theme}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.container}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.logoContainer}>
+            <Text variant="headlineMedium" style={styles.title}>Secure Auth</Text>
+            <Text variant="bodyLarge" style={styles.subtitle}>Sign in to your account</Text>
           </View>
-        ) : (
+
           <View style={styles.formContainer}>
-            <View style={styles.inputContainer}>
-              <Icon name="email" size={24} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#999"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  validateEmail(text);
-                }}
-              />
-            </View>
-            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-            
-            <View style={styles.inputContainer}>
-              <Icon name="lock" size={24} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#999"
-                secureTextEntry={!showPassword}
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  validatePassword(text);
-                }}
-              />
-              <TouchableOpacity 
-                style={styles.passwordIcon}
-                onPress={() => setShowPassword(!showPassword)}
-              >
-                <Icon 
-                  name={showPassword ? "visibility-off" : "visibility"} 
-                  size={24} 
-                  color="#666" 
+            <TextInput
+              label="Email"
+              value={email}
+              onChangeText={handleEmailChange}
+              onBlur={handleEmailBlur}
+              onFocus={handleEmailFocus}
+              mode="outlined"
+              error={!!emailError}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.input}
+            />
+            {emailError && <Text style={styles.errorText}>{emailError}</Text>}
+
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={handlePasswordChange}
+              onBlur={handlePasswordBlur}
+              onFocus={handlePasswordFocus}
+              mode="outlined"
+              error={!!passwordError}
+              secureTextEntry={!showPassword}
+              right={
+                <TextInput.Icon 
+                  icon={showPassword ? "eye-off" : "eye"}
+                  onPress={() => setShowPassword(!showPassword)}
                 />
-              </TouchableOpacity>
-            </View>
-            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
-            
-            <TouchableOpacity 
+              }
+              style={styles.input}
+            />
+            {passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
+
+            <Button
+              mode="text"
+              onPress={() => {}}
               style={styles.forgotPassword}
-              onPress={() => console.log('Forgot password')}
             >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.loginButton}
+              Forgot Password?
+            </Button>
+
+            <Button
+              mode="contained"
               onPress={handleLogin}
+              loading={isLoggingIn}
+              disabled={isLoggingIn || !!emailError || !!passwordError}
+              style={styles.loginButton}
             >
-              <Text style={styles.loginButtonText}>Login</Text>
-            </TouchableOpacity>
-            
+              Login
+            </Button>
+
             <View style={styles.orContainer}>
               <View style={styles.divider} />
               <Text style={styles.orText}>OR</Text>
               <View style={styles.divider} />
             </View>
-            
-            <TouchableOpacity
-              style={styles.googleButton}
-              onPress={handleGoogleSignIn}
-            >
-              <Image 
-                source={require('../assets/google-icon.png')} 
-                style={styles.googleIcon}
-                // If you don't have this image, you can use:
-                // <Icon name="logo-google" size={24} color="#fff" />
-              />
-              <Text style={styles.googleButtonText}>Sign in with Google</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={navigateToRegister}>
-                <Text style={styles.registerLink}>Register</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
 
-        {authState.error && (
-          <Text style={styles.errorText}>{authState.error}</Text>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <Button
+              mode="outlined"
+              onPress={handleGoogleSignIn}
+              disabled={isLoggingIn}
+              style={styles.googleButton}
+              icon={() => (
+                <Image 
+                  source={require('../assets/google-icon.png')} 
+                  style={styles.googleIcon}
+                />
+              )}
+            >
+              Sign in with Google
+            </Button>
+          </View>
+        </ScrollView>
+
+        <Portal>
+          {/* Success Modal */}
+          <PaperModal
+            visible={successModalVisible}
+            onDismiss={() => setSuccessModalVisible(false)}
+            contentContainerStyle={styles.modalContainer}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalIconContainer}>
+                <Text style={styles.modalIcon}>✓</Text>
+              </View>
+              <Text style={styles.modalTitle}>Success!</Text>
+              <Text style={styles.modalMessage}>{successMessage}</Text>
+            </View>
+          </PaperModal>
+
+          {/* Error Modal */}
+          <PaperModal
+            visible={errorModalVisible}
+            onDismiss={() => setErrorModalVisible(false)}
+            contentContainerStyle={styles.modalContainer}
+          >
+            <View style={styles.modalContent}>
+              <View style={[styles.modalIconContainer, styles.errorIconContainer]}>
+                <Text style={[styles.modalIcon, styles.errorIcon]}>!</Text>
+              </View>
+              <Text style={styles.modalTitle}>Error</Text>
+              <Text style={styles.modalMessage}>{errorMessage}</Text>
+              <Button
+                mode="contained"
+                onPress={() => setErrorModalVisible(false)}
+                style={styles.modalButton}
+              >
+                OK
+              </Button>
+            </View>
+          </PaperModal>
+        </Portal>
+      </KeyboardAvoidingView>
+    </PaperProvider>
   );
 };
 
@@ -232,61 +332,40 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     padding: 20,
   },
+  logoContainer: {
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 40,
+  },
   title: {
-    fontSize: 28,
+    color: '#4285F4',
     fontWeight: 'bold',
-    marginBottom: 30,
-    color: '#333',
+  },
+  subtitle: {
+    color: '#666',
+    marginTop: 5,
   },
   formContainer: {
     width: '100%',
-    maxWidth: 340,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#DDD',
-    paddingHorizontal: 10,
-    marginBottom: 12,
-    height: 50,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  passwordIcon: {
-    padding: 4,
   },
   input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
+    marginBottom: 10,
   },
-  loginButton: {
-    backgroundColor: '#4285F4',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  loginButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+  errorText: {
+    color: '#B00020',
+    fontSize: 12,
+    marginTop: -8,
+    marginBottom: 10,
+    marginLeft: 8,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
     marginBottom: 20,
   },
-  forgotPasswordText: {
-    color: '#4285F4',
-    fontSize: 14,
+  loginButton: {
+    marginBottom: 20,
   },
   orContainer: {
     flexDirection: 'row',
@@ -296,77 +375,64 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: '#DDD',
+    backgroundColor: '#E0E0E0',
   },
   orText: {
     marginHorizontal: 10,
     color: '#666',
-    fontSize: 16,
   },
   googleButton: {
-    backgroundColor: '#DB4437',
-    paddingVertical: 12,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 20,
   },
   googleIcon: {
     width: 24,
     height: 24,
-    marginRight: 8,
   },
-  googleButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  registerText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  registerLink: {
-    fontSize: 14,
-    color: '#4285F4',
-    fontWeight: '600',
-  },
-  userInfoContainer: {
-    alignItems: 'center',
-    padding: 20,
+  modalContainer: {
+    backgroundColor: 'white',
+    margin: 20,
     borderRadius: 8,
-    backgroundColor: '#E8F0FE',
-    width: '100%',
-    maxWidth: 300,
+    padding: 20,
+    alignItems: 'center',
   },
-  welcomeText: {
-    fontSize: 18,
+  modalContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  modalIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  errorIconContainer: {
+    backgroundColor: '#F44336',
+  },
+  modalIcon: {
+    color: 'white',
+    fontSize: 32,
+    fontWeight: 'bold',
+  },
+  errorIcon: {
+    fontSize: 36,
+  },
+  modalTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 8,
   },
-  emailText: {
+  modalMessage: {
     fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
     marginBottom: 16,
   },
-  signOutButton: {
-    backgroundColor: '#EA4335',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 4,
-  },
-  signOutButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  errorText: {
-    color: '#EA4335',
-    fontSize: 14,
-    marginBottom: 10,
+  modalButton: {
+    marginTop: 8,
+    width: '100%',
   },
 });
 

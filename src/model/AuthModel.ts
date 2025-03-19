@@ -20,12 +20,12 @@ class AuthModel {
   };
 
   constructor() {
-    // Configure Google Sign-In
-    GoogleSignin.configure({
-      webClientId: '413300786579-v4nnckujihfa12dkmgjlmgtgb6a3plfa.apps.googleusercontent.com', // Get this from Google Cloud Console
-      offlineAccess: true, // If you need a refresh token
-      scopes: ['profile', 'email'] // Request minimal scope
-    });
+    // Remove or comment out the existing GoogleSignin.configure
+    // GoogleSignin.configure({
+    //   webClientId: '615048959288-411ri03eldq6hg0fu7k705f5jr5c0ceu.apps.googleusercontent.com', 
+    //   offlineAccess: true,
+    //   scopes: ['profile', 'email']
+    // });
   }
 
   async init(): Promise<void> {
@@ -53,38 +53,98 @@ class AuthModel {
     try {
       this.state = { ...this.state, loading: true, error: null };
       
-      // Sign in with Google
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
+      console.log('1. Starting Google Sign-In process');
       
-      // Exchange Google token for your backend token
-      const idToken = await GoogleSignin.getTokens();
-      const response = await api.post('/auth/google', { 
-        idToken: idToken.idToken 
-      });
+      // Check if Google Play services are available
+      try {
+        await GoogleSignin.hasPlayServices({ 
+          showPlayServicesUpdateDialog: true 
+        });
+        console.log('2. Google Play Services check passed');
+      } catch (playError) {
+        console.error('Google Play Services error:', playError);
+        throw new Error('Google Play Services required: ' + (playError instanceof Error ? playError.message : 'Unknown error'));
+      }
       
-      const backendToken = response.data.token;
+      // Check if user is already signed in
+      try {
+        const isSignedIn = await GoogleSignin.isSignedIn();
+        console.log('3. User already signed in?', isSignedIn);
+        if (isSignedIn) {
+          await GoogleSignin.signOut();
+          console.log('   → Signed out existing user');
+        }
+      } catch (checkError) {
+        console.warn('Sign-in check error (non-fatal):', checkError);
+      }
+      
+      // Perform actual Google Sign-In
+      let signInResponse;
+      try {
+        console.log('4. Calling GoogleSignin.signIn()');
+        signInResponse = await GoogleSignin.signIn();
+        console.log('5. GoogleSignin.signIn() response:', JSON.stringify(signInResponse));
+      } catch (signInError) {
+        console.error('GoogleSignin.signIn() failed:', signInError);
+        throw new Error('Google sign-in failed: ' + (signInError instanceof Error ? signInError.message : 'Unknown error'));
+      }
+      
+      // Extract user info from response - handle both response formats
+      let userInfo;
+      if (signInResponse && signInResponse.user) {
+        // Direct user property format
+        userInfo = signInResponse.user;
+        console.log('6. Found user info in response.user');
+      } else if (signInResponse && signInResponse.data) {
+        // Type/data nested format
+        userInfo = signInResponse.data;
+        console.log('6. Found user info in response.data');
+      } else if (signInResponse && typeof signInResponse === 'object') {
+        // Assume response itself is user info
+        userInfo = signInResponse;
+        console.log('6. Using entire response as user info');
+      } else {
+        console.error('6. No user info structure found in response');
+        throw new Error('No user info returned from Google');
+      }
+      
+      console.log('7. Extracted user info:', JSON.stringify(userInfo));
+      
+      console.log('8. Getting tokens');
+      const idTokenResult = await GoogleSignin.getTokens();
+      
+      if (!idTokenResult || !idTokenResult.idToken) {
+        console.error('9. Failed to get valid token', idTokenResult);
+        throw new Error('Failed to get valid authentication token');
+      }
+      
+      console.log('10. Successfully got token');
+      const authToken = idTokenResult.idToken;
       
       // Store credentials securely
       await Keychain.setGenericPassword(
-        JSON.stringify(userInfo.user),
-        backendToken,
-        { service: 'auth', accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_ANY }
+        JSON.stringify(userInfo),
+        authToken,
+        { service: 'auth' }
       );
       
+      console.log('11. Stored credentials in Keychain');
+      
       // Update API headers
-      api.setAuthToken(backendToken);
+      api.setAuthToken(authToken);
       
       this.state = {
         isAuthenticated: true,
-        user: userInfo.user,
-        authToken: backendToken,
+        user: userInfo,
+        authToken: authToken,
         loading: false,
         error: null,
       };
       
+      console.log('12. Authentication completed successfully');
       return this.state;
     } catch (error) {
+      console.error('Google sign-in error details:', error);
       this.state = {
         ...this.state,
         loading: false,
@@ -121,6 +181,86 @@ class AuthModel {
         ...this.state,
         loading: false,
         error: error instanceof Error ? error.message : 'Sign out failed',
+      };
+      return this.state;
+    }
+  }
+
+  async signInWithEmailPassword(email: string, _password: string): Promise<AuthState> {
+    try {
+      this.state = { ...this.state, loading: true, error: null };
+      
+      // In a real app, you would call your backend API here
+      // For demo, simulate successful login if email doesn't contain "error"
+      if (email.includes("error")) {
+        throw new Error("Invalid email or password");
+      }
+      
+      // Simulate API response
+      const mockUser = {
+        id: "123",
+        name: email.split('@')[0],
+        email: email,
+        photo: null,
+      };
+      
+      const mockToken = "mock-jwt-token-" + Math.random().toString(36).substring(2);
+      
+      // Store credentials securely
+      await Keychain.setGenericPassword(
+        JSON.stringify(mockUser),
+        mockToken,
+        { service: 'auth', accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_ANY }
+      );
+      
+      // Update API headers
+      api.setAuthToken(mockToken);
+      
+      this.state = {
+        isAuthenticated: true,
+        user: mockUser as User,
+        authToken: mockToken,
+        loading: false,
+        error: null,
+      };
+      
+      return this.state;
+    } catch (error) {
+      this.state = {
+        ...this.state,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Authentication failed',
+      };
+      return this.state;
+    }
+  }
+
+  async registerWithEmailPassword(email: string, _password: string): Promise<AuthState> {
+    try {
+      this.state = { ...this.state, loading: true, error: null };
+      
+      // In a real app, you would call your backend API here
+      // For demo, simulate registration failure if email contains "exists"
+      if (email.includes("exists")) {
+        throw new Error("This email is already registered");
+      }
+      
+      // Simulate successful registration
+      // In a real app, this would create a new user account
+      
+      // For demo purposes, we'll just set the state but not authenticate
+      this.state = {
+        ...this.state,
+        loading: false,
+        error: null
+      };
+      
+      return this.state;
+    } catch (error) {
+      this.state = {
+        ...this.state,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Registration failed',
       };
       return this.state;
     }
