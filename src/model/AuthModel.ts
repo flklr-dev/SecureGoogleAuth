@@ -66,82 +66,48 @@ class AuthModel {
         throw new Error('Google Play Services required: ' + (playError instanceof Error ? playError.message : 'Unknown error'));
       }
       
-      // Check if user is already signed in
-      try {
-        const isSignedIn = await GoogleSignin.isSignedIn();
-        console.log('3. User already signed in?', isSignedIn);
-        if (isSignedIn) {
-          await GoogleSignin.signOut();
-          console.log('   → Signed out existing user');
-        }
-      } catch (checkError) {
-        console.warn('Sign-in check error (non-fatal):', checkError);
-      }
-      
       // Perform actual Google Sign-In
       let signInResponse;
       try {
-        console.log('4. Calling GoogleSignin.signIn()');
+        console.log('3. Calling GoogleSignin.signIn()');
         signInResponse = await GoogleSignin.signIn();
-        console.log('5. GoogleSignin.signIn() response:', JSON.stringify(signInResponse));
+        console.log('4. GoogleSignin.signIn() response:', JSON.stringify(signInResponse));
       } catch (signInError) {
         console.error('GoogleSignin.signIn() failed:', signInError);
         throw new Error('Google sign-in failed: ' + (signInError instanceof Error ? signInError.message : 'Unknown error'));
       }
       
-      // Extract user info from response - handle both response formats
-      let userInfo;
-      if (signInResponse && signInResponse.user) {
-        // Direct user property format
-        userInfo = signInResponse.user;
-        console.log('6. Found user info in response.user');
-      } else if (signInResponse && signInResponse.data) {
-        // Type/data nested format
-        userInfo = signInResponse.data;
-        console.log('6. Found user info in response.data');
-      } else if (signInResponse && typeof signInResponse === 'object') {
-        // Assume response itself is user info
-        userInfo = signInResponse;
-        console.log('6. Using entire response as user info');
-      } else {
-        console.error('6. No user info structure found in response');
-        throw new Error('No user info returned from Google');
+      // Get the tokens
+      const { idToken } = await GoogleSignin.getTokens();
+      
+      // Get current user info
+      const userInfo = await GoogleSignin.getCurrentUser();
+      
+      if (!userInfo || !idToken) {
+        throw new Error('Failed to get user information or token');
       }
-      
-      console.log('7. Extracted user info:', JSON.stringify(userInfo));
-      
-      console.log('8. Getting tokens');
-      const idTokenResult = await GoogleSignin.getTokens();
-      
-      if (!idTokenResult || !idTokenResult.idToken) {
-        console.error('9. Failed to get valid token', idTokenResult);
-        throw new Error('Failed to get valid authentication token');
-      }
-      
-      console.log('10. Successfully got token');
-      const authToken = idTokenResult.idToken;
       
       // Store credentials securely
       await Keychain.setGenericPassword(
         JSON.stringify(userInfo),
-        authToken,
+        idToken,
         { service: 'auth' }
       );
       
-      console.log('11. Stored credentials in Keychain');
+      console.log('5. Stored credentials in Keychain');
       
       // Update API headers
-      api.setAuthToken(authToken);
+      api.setAuthToken(idToken);
       
       this.state = {
         isAuthenticated: true,
         user: userInfo,
-        authToken: authToken,
+        authToken: idToken,
         loading: false,
         error: null,
       };
       
-      console.log('12. Authentication completed successfully');
+      console.log('6. Authentication completed successfully');
       return this.state;
     } catch (error) {
       console.error('Google sign-in error details:', error);

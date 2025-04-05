@@ -56,8 +56,7 @@ const LoginScreen: React.FC = () => {
     GoogleSignin.configure({
       webClientId: '615048959288-411ri03eldq6hg0fu7k705f5jr5c0ceu.apps.googleusercontent.com',
       offlineAccess: true,
-      forceCodeForRefreshToken: true, 
-      prompt: 'select_account' // Forces account selection dialog
+      forceCodeForRefreshToken: true
     });
   }, []);
 
@@ -136,31 +135,28 @@ const LoginScreen: React.FC = () => {
   const handleGoogleSignIn = async () => {
     setIsLoggingIn(true);
     try {
-      // Force the account picker dialog to show by signing out first
-      try {
-        await GoogleSignin.signOut();
-      } catch (e) {
-        console.log('No previous session to sign out from');
-      }
-      
       // Get available play services
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const userInfo = await GoogleSignin.signIn();
-      console.log('Google Sign-In Success:', userInfo);
+      const signInResult = await GoogleSignin.signIn();
+      console.log('Google Sign-In Success:', signInResult);
       
-      // Call AuthPresenter to handle the sign-in
+      // Get the tokens
+      const { idToken } = await GoogleSignin.getTokens();
+      
+      // Get user info
+      const userInfo = await GoogleSignin.getCurrentUser();
+      
+      // Use AuthPresenter to handle the sign-in
       const result = await AuthPresenter.signIn();
       
       if (result.error) {
         throw new Error(result.error);
       }
 
-      // Extract user name - handle different response formats
+      // Extract user name
       let userName = '';
-      if (userInfo.user) {
+      if (userInfo && userInfo.user) {
         userName = userInfo.user.name || userInfo.user.email;
-      } else if (userInfo.data && userInfo.data.user) {
-        userName = userInfo.data.user.name || userInfo.data.user.email;
       } else {
         userName = 'User';
       }

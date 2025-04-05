@@ -11,23 +11,10 @@ import {
   Platform,
   Dimensions
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import AuthPresenter from '../presenter/AuthPresenter';
 import { useNavigation } from '../utils/navigation';
 import { Portal, Modal as PaperModal, Button, Avatar } from 'react-native-paper';
-
-// Define icons properly to avoid type issues
-const ICONS = {
-  logout: Platform.OS === 'android' 
-    ? require('../assets/logout.png') // Use direct require statements instead of URI
-    : require('../assets/logout.png'),
-  user: Platform.OS === 'android'
-    ? require('../assets/user.png')
-    : require('../assets/user.png'),
-  security: Platform.OS === 'android'
-    ? require('../assets/security.png')
-    : require('../assets/security.png')
-};
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -53,10 +40,7 @@ const HomeScreen: React.FC = () => {
           onPress={handleLogoutPress}
           testID="logout-button"
         >
-          <Image 
-            source={ICONS.logout} 
-            style={styles.icon} 
-          />
+          <MaterialIcons name="logout" size={20} color="white" style={styles.icon} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </View>
@@ -85,7 +69,7 @@ const HomeScreen: React.FC = () => {
           {user && user.user && (
             <>
               <View style={styles.infoRow}>
-                <Icon name="person" size={24} color="#4285F4" style={styles.infoIcon} />
+                <MaterialIcons name="person" size={24} color="#4285F4" style={styles.infoIcon} />
                 <View style={styles.infoTextContainer}>
                   <Text style={styles.infoLabel}>Full Name</Text>
                   <Text style={styles.infoText}>
@@ -95,7 +79,7 @@ const HomeScreen: React.FC = () => {
               </View>
               
               <View style={styles.infoRow}>
-                <Icon name="email" size={24} color="#4285F4" style={styles.infoIcon} />
+                <MaterialIcons name="email" size={24} color="#4285F4" style={styles.infoIcon} />
                 <View style={styles.infoTextContainer}>
                   <Text style={styles.infoLabel}>Email Address</Text>
                   <Text style={styles.infoText}>
@@ -110,7 +94,7 @@ const HomeScreen: React.FC = () => {
         <View style={styles.securitySection}>
           <Text style={styles.sectionTitle}>Security Status</Text>
           <View style={styles.securityContent}>
-            <Icon name="security" size={40} color="#4CAF50" style={styles.securityIcon} />
+            <MaterialIcons name="security" size={40} color="#4CAF50" style={styles.securityIcon} />
             <Text style={styles.securityText}>
               Your session is secure and encrypted
             </Text>
@@ -125,7 +109,7 @@ const HomeScreen: React.FC = () => {
           contentContainerStyle={styles.modalContainer}
         >
           <View style={styles.modalContent}>
-            <Icon name="logout" size={50} color="#f44336" style={styles.modalIcon} />
+            <MaterialIcons name="logout" size={50} color="#f44336" style={styles.modalIcon} />
             <Text style={styles.modalTitle}>Sign Out</Text>
             <Text style={styles.modalMessage}>
               Are you sure you want to sign out of your account?
